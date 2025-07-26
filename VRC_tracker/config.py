@@ -23,7 +23,7 @@ class ConfigManager:
         return self.config.getint('OSC', 'port', fallback=9000)
 
     def set_osc_port(self, value):
-        self.config.set('OSC', 'port', str(value)) # configparser writes ints as strings
+        self.config.set('OSC', 'port', str(value))
 
     def get_camera_device_id(self):
         return self.config.getint('Camera', 'device_id', fallback=0)
@@ -81,3 +81,23 @@ class ConfigManager:
 
     def set_gyro_sensitivity(self, value):
         self.config.set('JoyConTracking', 'gyro_sensitivity', str(value))
+
+    # Pose Tracking Settings
+    def get_pose_min_detection_confidence(self):
+        return self.config.getfloat('PoseTracking', 'min_detection_confidence', fallback=0.5)
+
+    def set_pose_min_detection_confidence(self, value):
+        self.config.set('PoseTracking', 'min_detection_confidence', str(value))
+
+    def get_pose_min_tracking_confidence(self):
+        return self.config.getfloat('PoseTracking', 'min_tracking_confidence', fallback=0.5)
+
+    def set_pose_min_tracking_confidence(self, value):
+        self.config.set('PoseTracking', 'min_tracking_confidence', str(value))
+
+    # Arm OSC Parameters
+    def get_arm_osc_parameter(self, param_name):
+        return self.config.get('ArmOSCParameters', param_name)
+
+    def set_arm_osc_parameter(self, param_name, value):
+        self.config.set('ArmOSCParameters', param_name, value)

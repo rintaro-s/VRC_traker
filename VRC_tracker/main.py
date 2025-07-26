@@ -9,7 +9,7 @@ from modules.joycon_manager import JoyConManager
 from modules.data_processor import DataProcessor
 from modules.osc_sender import OSCSender
 from gui import GUI
-from visualizer import VisualizerThread # VisualizerThreadをインポート
+from visualizer import VisualizerThread
 
 class TrackingThread(threading.Thread):
     def __init__(self, config_manager, gui_data_queue, gui_command_queue, visualizer_data_queue):
@@ -17,7 +17,7 @@ class TrackingThread(threading.Thread):
         self.config = config_manager
         self.gui_data_queue = gui_data_queue
         self.gui_command_queue = gui_command_queue
-        self.visualizer_data_queue = visualizer_data_queue # Visualizer用キュー
+        self.visualizer_data_queue = visualizer_data_queue
         self.running = True
 
         self.camera_tracker = None
@@ -29,7 +29,12 @@ class TrackingThread(threading.Thread):
     def _initialize_modules(self):
         if self.camera_tracker:
             self.camera_tracker.release()
-        self.camera_tracker = CameraTracker(device_id=self.config.get_camera_device_id())
+        # CameraTrackerの初期化時にPoseTrackingの設定を渡す
+        self.camera_tracker = CameraTracker(
+            device_id=self.config.get_camera_device_id(),
+            pose_min_detection_confidence=self.config.get_pose_min_detection_confidence(),
+            pose_min_tracking_confidence=self.config.get_pose_min_tracking_confidence()
+        )
 
         if self.joycon_manager:
             self.joycon_manager.disconnect()
@@ -55,12 +60,14 @@ class TrackingThread(threading.Thread):
                 except queue.Empty:
                     pass
 
-                hand_results, face_results, frame = self.camera_tracker.get_landmarks()
+                # pose_resultsも受け取るように変更
+                hand_results, face_results, pose_results, frame = self.camera_tracker.get_landmarks()
                 joycon_status = self.joycon_manager.get_status()
 
                 info_for_gui = {
                     "hands_detected": [],
                     "face_detected": False,
+                    "pose_detected": False, # ポーズ検出状態を追加
                     "joycon_connected": []
                 }
                 visualizer_data = {}
@@ -85,6 +92,15 @@ class TrackingThread(threading.Thread):
                         self.osc_sender.send(address, value)
                     info_for_gui.update(face_info)
                     visualizer_data.update(face_visualizer_data)
+
+                # ポーズトラッキングデータの処理と送信
+                if pose_results and pose_results.pose_landmarks:
+                    info_for_gui["pose_detected"] = True
+                    pose_osc_params, pose_info, pose_visualizer_data = self.data_processor.process_pose_data(pose_results)
+                    for address, value in pose_osc_params.items():
+                        self.osc_sender.send(address, value)
+                    info_for_gui.update(pose_info)
+                    visualizer_data.update(pose_visualizer_data)
 
                 # Joy-Conデータの処理と送信
                 if joycon_status:
@@ -127,18 +143,18 @@ class TrackingThread(threading.Thread):
 
 class Application:
     def __init__(self):
-        self.config = ConfigManager('VRC_tracker/settings.ini') # ここを変更
+        self.config = ConfigManager('VRC_tracker/settings.ini')
         self.gui_data_queue = queue.Queue(maxsize=1)
         self.gui_command_queue = queue.Queue(maxsize=1)
-        self.visualizer_data_queue = queue.Queue(maxsize=1) # Visualizer用キュー
+        self.visualizer_data_queue = queue.Queue(maxsize=1)
 
         self.tracking_thread = TrackingThread(self.config, self.gui_data_queue, self.gui_command_queue, self.visualizer_data_queue)
         self.gui = GUI(self.config, self.gui_data_queue, self.gui_command_queue)
-        self.visualizer_thread = VisualizerThread(self.visualizer_data_queue) # Visualizerスレッド
+        self.visualizer_thread = VisualizerThread(self.visualizer_data_queue)
 
     def run(self):
         self.tracking_thread.start()
-        self.visualizer_thread.start() # Visualizerスレッドを開始
+        self.visualizer_thread.start()
         self.gui.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.gui.mainloop()
 

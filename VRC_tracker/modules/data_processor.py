@@ -1,7 +1,7 @@
 import math
 import mediapipe as mp
 from config import ConfigManager
-import time # timeモジュールをインポート
+import time
 
 class DataProcessor:
     def __init__(self, config_manager: ConfigManager):
@@ -9,6 +9,7 @@ class DataProcessor:
 
         self.mp_hands = mp.solutions.hands
         self.mp_face_mesh = mp.solutions.face_mesh
+        self.mp_pose = mp.solutions.pose # MediaPipe Poseを初期化
 
         self.THUMB_TIP = self.mp_hands.HandLandmark.THUMB_TIP
         self.THUMB_MCP = self.mp_hands.HandLandmark.THUMB_MCP
@@ -30,13 +31,33 @@ class DataProcessor:
         self.MOUTH_UPPER = 13
         self.MOUTH_LOWER = 14
 
-        # Joy-Conの姿勢を保持するための変数 (簡易的な積分)
-        self.joycon_orientation_l = [0.0, 0.0, 0.0] # Roll, Pitch, Yaw (ラジアン)
+        self.joycon_orientation_l = [0.0, 0.0, 0.0]
         self.joycon_orientation_r = [0.0, 0.0, 0.0]
         self.last_joycon_update_time = time.time()
 
     def _get_distance(self, p1, p2):
         return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
+
+    def _calculate_angle(self, p1, p2, p3):
+        """3点から角度を計算 (p2が頂点)"""
+        # ベクトルを計算
+        vec1 = [p1.x - p2.x, p1.y - p2.y, p1.z - p2.z]
+        vec2 = [p3.x - p2.x, p3.y - p2.y, p3.z - p2.z]
+
+        # ドット積とベクトルの大きさ
+        dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2]
+        magnitude1 = math.sqrt(vec1[0]**2 + vec1[1]**2 + vec1[2]**2)
+        magnitude2 = math.sqrt(vec2[0]**2 + vec2[1]**2 + vec2[2]**2)
+
+        # コサインを計算し、アークコサインで角度を求める
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0 # ゼロ除算を避ける
+        
+        cosine_angle = dot_product / (magnitude1 * magnitude2)
+        # 浮動小数点誤差で範囲外になる可能性があるのでクランプ
+        cosine_angle = max(-1.0, min(1.0, cosine_angle))
+        angle_radians = math.acos(cosine_angle)
+        return math.degrees(angle_radians) # 度数で返す
 
     def _calculate_finger_curl(self, landmarks, tip_idx, mcp_idx, finger_name):
         tip = landmarks.landmark[tip_idx]
@@ -54,7 +75,7 @@ class DataProcessor:
     def process_hand_data(self, hand_results):
         osc_params = {}
         info_for_gui = {}
-        visualizer_data = {} # Visualizerに送るデータ
+        visualizer_data = {}
 
         if not hand_results.multi_hand_landmarks:
             return osc_params, info_for_gui, visualizer_data
@@ -95,7 +116,6 @@ class DataProcessor:
             osc_params[f"/avatar/parameters/Gesture{prefix}"] = gesture_value
             info_for_gui[f"Gesture{prefix}"] = gesture_value
 
-            # Visualizer用にランドマークを保存
             visualizer_data["hand_landmarks"][prefix] = hand_landmarks.landmark
 
         return osc_params, info_for_gui, visualizer_data
@@ -103,7 +123,7 @@ class DataProcessor:
     def process_face_data(self, face_results):
         osc_params = {}
         info_for_gui = {}
-        visualizer_data = {} # Visualizerに送るデータ (顔は今回は描画しないが、将来的な拡張のため)
+        visualizer_data = {}
 
         if not face_results.multi_face_landmarks:
             return osc_params, info_for_gui, visualizer_data
@@ -144,10 +164,85 @@ class DataProcessor:
 
         return osc_params, info_for_gui, visualizer_data
 
+    def process_pose_data(self, pose_results):
+        osc_params = {}
+        info_for_gui = {}
+        visualizer_data = {}
+        
+        if not pose_results.pose_landmarks:
+            return osc_params, info_for_gui, visualizer_data
+
+        landmarks = pose_results.pose_landmarks.landmark
+        visualizer_data["pose_landmarks"] = landmarks
+
+        # 肩の回転 (簡易的な例: 左右の肩のY座標の差をX軸回転にマッピング)
+        # VRChatのアバターに合わせて調整が必要
+        left_shoulder = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER]
+        left_elbow = landmarks[self.mp_pose.PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[self.mp_pose.PoseLandmark.RIGHT_ELBOW]
+        left_wrist = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST]
+        
+        # 左肩の回転 (例: 肩と肘の相対位置から計算)
+        # X軸回転 (腕を前後に振る)
+        # Y軸回転 (腕を左右に開く)
+        # Z軸回転 (腕をひねる)
+        # ここでは簡易的に、肩と肘のY座標の差をX軸回転にマッピング
+        # 実際のVRChatアバターのボーン構造に合わせて、より複雑な計算が必要
+        
+        # 左肩のX軸回転 (腕を前後に振る)
+        # 肘が肩より前にあるか後ろにあるかで判断
+        left_shoulder_x_angle = (left_elbow.z - left_shoulder.z) * 100 # 適当なスケール
+        osc_params[self.config.get_arm_osc_parameter("left_shoulder_x_param")] = left_shoulder_x_angle
+        info_for_gui["LeftShoulderX"] = left_shoulder_x_angle
+
+        # 左肩のY軸回転 (腕を左右に開く)
+        # 肘が肩より外側にあるか内側にあるかで判断
+        left_shoulder_y_angle = (left_elbow.x - left_shoulder.x) * 100
+        osc_params[self.config.get_arm_osc_parameter("left_shoulder_y_param")] = left_shoulder_y_angle
+        info_for_gui["LeftShoulderY"] = left_shoulder_y_angle
+
+        # 左肩のZ軸回転 (腕をひねる) - 簡易版
+        # 手首と肘のY座標の差をZ軸回転にマッピング
+        left_shoulder_z_angle = (left_wrist.y - left_elbow.y) * 100
+        osc_params[self.config.get_arm_osc_parameter("left_shoulder_z_param")] = left_shoulder_z_angle
+        info_for_gui["LeftShoulderZ"] = left_shoulder_z_angle
+
+        # 右肩も同様
+        right_shoulder_x_angle = (right_elbow.z - right_shoulder.z) * 100
+        osc_params[self.config.get_arm_osc_parameter("right_shoulder_x_param")] = right_shoulder_x_angle
+        info_for_gui["RightShoulderX"] = right_shoulder_x_angle
+
+        right_shoulder_y_angle = (right_elbow.x - right_shoulder.x) * 100
+        osc_params[self.config.get_arm_osc_parameter("right_shoulder_y_param")] = right_shoulder_y_angle
+        info_for_gui["RightShoulderY"] = right_shoulder_y_angle
+
+        right_shoulder_z_angle = (right_wrist.y - right_elbow.y) * 100
+        osc_params[self.config.get_arm_osc_parameter("right_shoulder_z_param")] = right_shoulder_z_angle
+        info_for_gui["RightShoulderZ"] = right_shoulder_z_angle
+
+        # 肘の曲がり具合 (角度を計算)
+        # 左肘: 肩-肘-手首の角度
+        left_elbow_angle = self._calculate_angle(left_shoulder, left_elbow, left_wrist)
+        # 角度を0-1の範囲に正規化 (例: 180度(伸びている) -> 0, 0度(完全に曲がっている) -> 1)
+        # 実際のVRChatアバターのブレンドシェイプやボーンの回転に合わせて調整
+        normalized_left_elbow_bend = (180 - left_elbow_angle) / 180.0
+        osc_params[self.config.get_arm_osc_parameter("left_elbow_bend_param")] = normalized_left_elbow_bend
+        info_for_gui["LeftElbowBend"] = normalized_left_elbow_bend
+
+        # 右肘も同様
+        right_elbow_angle = self._calculate_angle(right_shoulder, right_elbow, right_wrist)
+        normalized_right_elbow_bend = (180 - right_elbow_angle) / 180.0
+        osc_params[self.config.get_arm_osc_parameter("right_elbow_bend_param")] = normalized_right_elbow_bend
+        info_for_gui["RightElbowBend"] = normalized_right_elbow_bend
+
+        return osc_params, info_for_gui, visualizer_data
+
     def process_joycon_data(self, joycon_status):
         osc_params = {}
         info_for_gui = {}
-        visualizer_data = {} # Visualizerに送るデータ
+        visualizer_data = {}
         visualizer_data["joycon_orientations"] = {}
 
         current_time = time.time()
@@ -158,11 +253,9 @@ class DataProcessor:
 
         if 'right' in joycon_status and joycon_status['right'] and 'gyro' in joycon_status['right']:
             gyro_r = joycon_status['right']['gyro']
-            # ジャイロ値を積分して姿勢を更新 (簡易的な実装)
-            # ジャイロ値はdeg/sなので、ラジアン/sに変換してdtを掛ける
-            self.joycon_orientation_r[0] += math.radians(gyro_r[0]) * dt # Roll (X)
-            self.joycon_orientation_r[1] += math.radians(gyro_r[1]) * dt # Pitch (Y)
-            self.joycon_orientation_r[2] += math.radians(gyro_r[2]) * dt # Yaw (Z)
+            self.joycon_orientation_r[0] += math.radians(gyro_r[0]) * dt
+            self.joycon_orientation_r[1] += math.radians(gyro_r[1]) * dt
+            self.joycon_orientation_r[2] += math.radians(gyro_r[2]) * dt
 
             osc_params["/avatar/parameters/RightHandYaw"] = self.joycon_orientation_r[2] * gyro_sensitivity
             osc_params["/avatar/parameters/RightHandPitch"] = self.joycon_orientation_r[1] * gyro_sensitivity
@@ -174,9 +267,9 @@ class DataProcessor:
 
         if 'left' in joycon_status and joycon_status['left'] and 'gyro' in joycon_status['left']:
             gyro_l = joycon_status['left']['gyro']
-            self.joycon_orientation_l[0] += math.radians(gyro_l[0]) * dt # Roll (X)
-            self.joycon_orientation_l[1] += math.radians(gyro_l[1]) * dt # Pitch (Y)
-            self.joycon_orientation_l[2] += math.radians(gyro_l[2]) * dt # Yaw (Z)
+            self.joycon_orientation_l[0] += math.radians(gyro_l[0]) * dt
+            self.joycon_orientation_l[1] += math.radians(gyro_l[1]) * dt
+            self.joycon_orientation_l[2] += math.radians(gyro_l[2]) * dt
 
             osc_params["/avatar/parameters/LeftHandYaw"] = self.joycon_orientation_l[2] * gyro_sensitivity
             osc_params["/avatar/parameters/LeftHandPitch"] = self.joycon_orientation_l[1] * gyro_sensitivity
@@ -186,14 +279,14 @@ class DataProcessor:
             info_for_gui["LeftHandRoll"] = self.joycon_orientation_l[0] * gyro_sensitivity
             visualizer_data["joycon_orientations"]["Left"] = self.joycon_orientation_l
 
-        if 'right' in joycon_status and joycon_status['right'] and 'stick' in joycon_status['right']:
+        if 'right' in joycon_status and joycon_status['right'] and 'stick' in joycon_status['right'] and joycon_status['right']['stick'] is not None:
             stick_r = joycon_status['right']['stick']
             osc_params["/avatar/parameters/RightStickX"] = stick_r[0]
             osc_params["/avatar/parameters/RightStickY"] = stick_r[1]
             info_for_gui["RightStickX"] = stick_r[0]
             info_for_gui["RightStickY"] = stick_r[1]
         
-        if 'left' in joycon_status and joycon_status['left'] and 'stick' in joycon_status['left']:
+        if 'left' in joycon_status and joycon_status['left'] and 'stick' in joycon_status['left'] and joycon_status['left']['stick'] is not None:
             stick_l = joycon_status['left']['stick']
             osc_params["/avatar/parameters/LeftStickX"] = stick_l[0]
             osc_params["/avatar/parameters/LeftStickY"] = stick_l[1]

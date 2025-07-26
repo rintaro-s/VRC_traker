@@ -31,6 +31,7 @@ class GUI(tk.Tk):
         self.create_info_tab(self.info_frame)
 
     def create_settings_tab(self, parent_frame):
+        # OSC Settings
         osc_group = ttk.LabelFrame(parent_frame, text="OSC Settings")
         osc_group.pack(padx=10, pady=5, fill="x")
         tk.Label(osc_group, text="Host:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
@@ -40,12 +41,14 @@ class GUI(tk.Tk):
         self.osc_port_entry = tk.Entry(osc_group)
         self.osc_port_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
 
+        # Camera Settings
         camera_group = ttk.LabelFrame(parent_frame, text="Camera Settings")
         camera_group.pack(padx=10, pady=5, fill="x")
         tk.Label(camera_group, text="Device ID:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
         self.camera_id_entry = tk.Entry(camera_group)
         self.camera_id_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
 
+        # Hand Tracking Settings (簡易版)
         hand_group = ttk.LabelFrame(parent_frame, text="Hand Tracking Settings")
         hand_group.pack(padx=10, pady=5, fill="x")
         tk.Label(hand_group, text="Gesture Fist Threshold:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
@@ -55,6 +58,7 @@ class GUI(tk.Tk):
         self.hand_open_threshold_entry = tk.Entry(hand_group)
         self.hand_open_threshold_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
 
+        # Face Tracking Settings (簡易版)
         face_group = ttk.LabelFrame(parent_frame, text="Face Tracking Settings")
         face_group.pack(padx=10, pady=5, fill="x")
         tk.Label(face_group, text="Eye Open Threshold:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
@@ -64,12 +68,39 @@ class GUI(tk.Tk):
         self.eye_closed_threshold_entry = tk.Entry(face_group)
         self.eye_closed_threshold_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
 
+        # Joy-Con Tracking Settings
         joycon_group = ttk.LabelFrame(parent_frame, text="Joy-Con Tracking Settings")
         joycon_group.pack(padx=10, pady=5, fill="x")
         tk.Label(joycon_group, text="Gyro Sensitivity:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
         self.gyro_sensitivity_entry = tk.Entry(joycon_group)
         self.gyro_sensitivity_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
 
+        # Pose Tracking Settings
+        pose_group = ttk.LabelFrame(parent_frame, text="Pose Tracking Settings")
+        pose_group.pack(padx=10, pady=5, fill="x")
+        tk.Label(pose_group, text="Min Detection Confidence:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        self.pose_min_detection_confidence_entry = tk.Entry(pose_group)
+        self.pose_min_detection_confidence_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        tk.Label(pose_group, text="Min Tracking Confidence:").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.pose_min_tracking_confidence_entry = tk.Entry(pose_group)
+        self.pose_min_tracking_confidence_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+
+        # Arm OSC Parameters (表示のみ、変更はsettings.iniで)
+        arm_osc_group = ttk.LabelFrame(parent_frame, text="Arm OSC Parameters (Read-only)")
+        arm_osc_group.pack(padx=10, pady=5, fill="x")
+        
+        params = [
+            "left_shoulder_x_param", "left_shoulder_y_param", "left_shoulder_z_param",
+            "right_shoulder_x_param", "right_shoulder_y_param", "right_shoulder_z_param",
+            "left_elbow_bend_param", "right_elbow_bend_param"
+        ]
+        for i, param_name in enumerate(params):
+            tk.Label(arm_osc_group, text=f"{param_name}:").grid(row=i, column=0, padx=5, pady=2, sticky="w")
+            param_value = self.config_manager.get_arm_osc_parameter(param_name)
+            tk.Label(arm_osc_group, text=param_value).grid(row=i, column=1, padx=5, pady=2, sticky="w")
+
+
+        # Apply and Save Buttons
         button_frame = ttk.Frame(parent_frame)
         button_frame.pack(pady=10)
         ttk.Button(button_frame, text="Apply Settings", command=self.apply_settings).pack(side="left", padx=5)
@@ -124,6 +155,12 @@ class GUI(tk.Tk):
         self.gyro_sensitivity_entry.delete(0, tk.END)
         self.gyro_sensitivity_entry.insert(0, self.config_manager.get_gyro_sensitivity())
 
+        # Pose Tracking
+        self.pose_min_detection_confidence_entry.delete(0, tk.END)
+        self.pose_min_detection_confidence_entry.insert(0, self.config_manager.get_pose_min_detection_confidence())
+        self.pose_min_tracking_confidence_entry.delete(0, tk.END)
+        self.pose_min_tracking_confidence_entry.insert(0, self.config_manager.get_pose_min_tracking_confidence())
+
     def apply_settings(self):
         try:
             # OSC
@@ -152,6 +189,10 @@ class GUI(tk.Tk):
             # Joy-Con Tracking
             self.config_manager.set_gyro_sensitivity(float(self.gyro_sensitivity_entry.get()))
 
+            # Pose Tracking
+            self.config_manager.set_pose_min_detection_confidence(float(self.pose_min_detection_confidence_entry.get()))
+            self.config_manager.set_pose_min_tracking_confidence(float(self.pose_min_tracking_confidence_entry.get()))
+
             self.command_queue.put({"type": "APPLY_SETTINGS"})
             messagebox.showinfo("Settings", "Settings applied successfully! (Not yet saved to file)")
 
@@ -173,7 +214,6 @@ class GUI(tk.Tk):
                     self.update_info_display(data["info"])
                     if "frame" in data:
                         self.update_camera_preview(data["frame"])
-                    # Joy-Con接続状態の更新
                     self.update_joycon_status_display(data["info"].get("joycon_connected", []))
                 elif data["type"] == "OSC_SENT":
                     pass
@@ -215,6 +255,19 @@ class GUI(tk.Tk):
             display_str += f"  MouthOpen: {info.get('MouthOpen'):.2f}\n"
         else:
             display_str += "Face: Not detected\n"
+
+        if info.get("pose_detected"):
+            display_str += "Pose Detected: Yes\n"
+            display_str += f"  Left Shoulder X: {info.get('LeftShoulderX'):.2f}\n"
+            display_str += f"  Left Shoulder Y: {info.get('LeftShoulderY'):.2f}\n"
+            display_str += f"  Left Shoulder Z: {info.get('LeftShoulderZ'):.2f}\n"
+            display_str += f"  Right Shoulder X: {info.get('RightShoulderX'):.2f}\n"
+            display_str += f"  Right Shoulder Y: {info.get('RightShoulderY'):.2f}\n"
+            display_str += f"  Right Shoulder Z: {info.get('RightShoulderZ'):.2f}\n"
+            display_str += f"  Left Elbow Bend: {info.get('LeftElbowBend'):.2f}\n"
+            display_str += f"  Right Elbow Bend: {info.get('RightElbowBend'):.2f}\n"
+        else:
+            display_str += "Pose: Not detected\n"
 
         self.info_text.insert(tk.END, display_str)
         self.info_text.config(state="disabled")

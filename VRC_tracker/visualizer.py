@@ -1,38 +1,42 @@
 import pyglet
-from pyglet.gl import * # ここを変更: すべてのOpenGL関数を直接インポート
+import pyglet.gl as gl
 import queue
 import threading
 import math
+import mediapipe as mp # MediaPipeをインポート
 
 class Visualizer(pyglet.window.Window):
     def __init__(self, data_queue):
         super().__init__(width=800, height=600, caption='VRC_traker 3D Visualizer', resizable=True)
-        glClearColor(0.2, 0.3, 0.4, 1.0) # gl. プレフィックスは不要
+        gl.glClearColor(0.2, 0.3, 0.4, 1.0)
 
         self.data_queue = data_queue
         self.tracking_data = {} # 最新のトラッキングデータを保持
 
-        glMatrixMode(GL_PROJECTION) # gl. プレフィックスは不要
-        glLoadIdentity()
-        gluPerspective(60, self.width / self.height, 0.1, 100.0) # glu. プレフィックスは不要
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
-        gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
+        gl.glMatrixMode(gl.GL_PROJECTION)
+        gl.glLoadIdentity()
+        gl.gluPerspective(60, self.width / self.height, 0.1, 100.0)
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        gl.glLoadIdentity()
+        gl.gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
 
-        glEnable(GL_LIGHTING)
-        glEnable(GL_LIGHT0)
-        glLightfv(GL_LIGHT0, GL_POSITION, (GLfloat * 4)(0, 0, 1, 0))
-        glLightfv(GL_LIGHT0, GL_AMBIENT, (GLfloat * 4)(0.5, 0.5, 0.5, 1))
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, (GLfloat * 4)(0.8, 0.8, 0.8, 1))
+        gl.glEnable(gl.GL_LIGHTING)
+        gl.glEnable(gl.GL_LIGHT0)
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(0, 0, 1, 0))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(0.5, 0.5, 0.5, 1))
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(0.8, 0.8, 0.8, 1))
 
-        glEnable(GL_DEPTH_TEST)
+        gl.glEnable(gl.GL_DEPTH_TEST)
 
         pyglet.clock.schedule_interval(self.update, 1/60.0)
 
+        # MediaPipe Poseの接続定義
+        self.mp_pose = mp.solutions.pose
+
     def on_draw(self):
         self.clear()
-        glLoadIdentity()
-        gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
+        gl.glLoadIdentity()
+        gl.gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
 
         self.draw_axes()
 
@@ -43,29 +47,32 @@ class Visualizer(pyglet.window.Window):
             if "joycon_orientations" in self.tracking_data:
                 self.draw_joycons(self.tracking_data["joycon_orientations"])
 
+            if "pose_landmarks" in self.tracking_data:
+                self.draw_pose(self.tracking_data["pose_landmarks"])
+
     def draw_axes(self):
-        glBegin(GL_LINES)
-        glColor3f(1.0, 0.0, 0.0)
-        glVertex3f(0.0, 0.0, 0.0)
-        glVertex3f(1.0, 0.0, 0.0)
-        glColor3f(0.0, 1.0, 0.0)
-        glVertex3f(0.0, 0.0, 0.0)
-        glVertex3f(0.0, 1.0, 0.0)
-        glColor3f(0.0, 0.0, 1.0)
-        glVertex3f(0.0, 0.0, 0.0)
-        glVertex3f(0.0, 0.0, 1.0)
-        glEnd()
+        gl.glBegin(gl.GL_LINES)
+        gl.glColor3f(1.0, 0.0, 0.0)
+        gl.glVertex3f(0.0, 0.0, 0.0)
+        gl.glVertex3f(1.0, 0.0, 0.0)
+        gl.glColor3f(0.0, 1.0, 0.0)
+        gl.glVertex3f(0.0, 0.0, 0.0)
+        gl.glVertex3f(0.0, 1.0, 0.0)
+        gl.glColor3f(0.0, 0.0, 1.0)
+        gl.glVertex3f(0.0, 0.0, 0.0)
+        gl.glVertex3f(0.0, 0.0, 1.0)
+        gl.glEnd()
 
     def draw_hands(self, hand_landmarks_data):
         scale = 2.0
 
         for hand_type, landmarks in hand_landmarks_data.items():
-            glColor3f(1.0, 1.0, 0.0)
-            glPointSize(5.0)
-            glBegin(GL_POINTS)
+            gl.glColor3f(1.0, 1.0, 0.0)
+            gl.glPointSize(5.0)
+            gl.glBegin(gl.GL_POINTS)
             for lm in landmarks:
-                glVertex3f(lm.x * scale - scale/2, lm.y * scale - scale/2, lm.z * scale - scale/2)
-            glEnd()
+                gl.glVertex3f(lm.x * scale - scale/2, lm.y * scale - scale/2, lm.z * scale - scale/2)
+            gl.glEnd()
 
             connections = [
                 (0, 1), (1, 2), (2, 3), (3, 4),
@@ -74,32 +81,32 @@ class Visualizer(pyglet.window.Window):
                 (13, 14), (14, 15), (15, 16),
                 (0, 17), (17, 18), (18, 19), (19, 20)
             ]
-            glColor3f(0.0, 1.0, 1.0)
-            glLineWidth(2.0)
-            glBegin(GL_LINES)
+            gl.glColor3f(0.0, 1.0, 1.0)
+            gl.glLineWidth(2.0)
+            gl.glBegin(gl.GL_LINES)
             for connection in connections:
                 p1 = landmarks[connection[0]]
                 p2 = landmarks[connection[1]]
-                glVertex3f(p1.x * scale - scale/2, p1.y * scale - scale/2, p1.z * scale - scale/2)
-                glVertex3f(p2.x * scale - scale/2, p2.y * scale - scale/2, p2.z * scale - scale/2)
-            glEnd()
+                gl.glVertex3f(p1.x * scale - scale/2, p1.y * scale - scale/2, p1.z * scale - scale/2)
+                gl.glVertex3f(p2.x * scale - scale/2, p2.y * scale - scale/2, p2.z * scale - scale/2)
+            gl.glEnd()
 
     def draw_joycons(self, joycon_orientations):
         size = 0.2
 
         for jc_type, orientation in joycon_orientations.items():
-            glPushMatrix()
+            gl.glPushMatrix()
             
             if jc_type == "Left":
-                glTranslatef(-0.5, 0.0, 0.0)
-                glColor3f(0.0, 0.0, 1.0)
+                gl.glTranslatef(-0.5, 0.0, 0.0)
+                gl.glColor3f(0.0, 0.0, 1.0)
             else:
-                glTranslatef(0.5, 0.0, 0.0)
-                glColor3f(1.0, 0.0, 0.0)
+                gl.glTranslatef(0.5, 0.0, 0.0)
+                gl.glColor3f(1.0, 0.0, 0.0)
 
-            glRotatef(math.degrees(orientation[0]), 1, 0, 0)
-            glRotatef(math.degrees(orientation[1]), 0, 1, 0)
-            glRotatef(math.degrees(orientation[2]), 0, 0, 1)
+            gl.glRotatef(math.degrees(orientation[0]), 1, 0, 0)
+            gl.glRotatef(math.degrees(orientation[1]), 0, 1, 0)
+            gl.glRotatef(math.degrees(orientation[2]), 0, 0, 1)
 
             vertices = [
                 (-size, -size, -size), ( size, -size, -size), ( size,  size, -size), (-size,  size, -size),
@@ -111,13 +118,37 @@ class Visualizer(pyglet.window.Window):
                 (0, 1, 5, 4), (3, 2, 6, 7)
             ]
 
-            glBegin(GL_QUADS)
+            gl.glBegin(gl.GL_QUADS)
             for face in faces:
                 for vertex_idx in face:
-                    glVertex3f(*vertices[vertex_idx])
-            glEnd()
+                    gl.glVertex3f(*vertices[vertex_idx])
+            gl.glEnd()
 
-            glPopMatrix()
+            gl.glPopMatrix()
+
+    def draw_pose(self, pose_landmarks):
+        scale = 2.0 # スケールファクター
+
+        gl.glColor3f(0.0, 1.0, 0.0) # 緑色でポーズを描画
+        gl.glPointSize(5.0)
+        gl.glBegin(gl.GL_POINTS)
+        for lm in pose_landmarks:
+            # 可視性スコアが低いランドマークは描画しない
+            if lm.visibility > 0.5:
+                gl.glVertex3f(lm.x * scale - scale/2, lm.y * scale - scale/2, lm.z * scale - scale/2)
+        gl.glEnd()
+
+        gl.glColor3f(0.0, 0.5, 1.0) # 水色でポーズの接続を描画
+        gl.glLineWidth(2.0)
+        gl.glBegin(gl.GL_LINES)
+        for connection in self.mp_pose.POSE_CONNECTIONS:
+            p1 = pose_landmarks[connection[0]]
+            p2 = pose_landmarks[connection[1]]
+            # 両方のランドマークの可視性スコアが高い場合のみ描画
+            if p1.visibility > 0.5 and p2.visibility > 0.5:
+                gl.glVertex3f(p1.x * scale - scale/2, p1.y * scale - scale/2, p1.z * scale - scale/2)
+                gl.glVertex3f(p2.x * scale - scale/2, p2.y * scale - scale/2, p2.z * scale - scale/2)
+        gl.glEnd()
 
     def update(self, dt):
         try:
