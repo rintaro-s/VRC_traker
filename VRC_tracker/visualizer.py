@@ -1,5 +1,11 @@
 import pyglet
-from pyglet.gl import *
+from pyglet.gl import (
+    glClearColor, glMatrixMode, glLoadIdentity, gluPerspective, gluLookAt,
+    glEnable, GL_LIGHTING, GL_LIGHT0, glLightfv, GL_POSITION, GL_AMBIENT, GL_DIFFUSE,
+    GL_DEPTH_TEST, glBegin, GL_LINES, glColor3f, glVertex3f, glEnd,
+    glPointSize, GL_POINTS, glLineWidth, GL_QUADS, glPushMatrix, glPopMatrix,
+    glTranslatef, glRotatef, GLfloat
+)
 import queue
 import threading
 import math
@@ -151,13 +157,17 @@ class Visualizer(pyglet.window.Window):
         pyglet.app.run()
 
     def close(self):
-        self.close() # ウィンドウを閉じる
+        # pyglet.app.exit() を呼び出してメインループを終了させる
+        pyglet.app.exit()
+        # ウィンドウ自体を閉じる
+        super().close()
 
 class VisualizerThread(threading.Thread):
     def __init__(self, data_queue):
         super().__init__()
         self.data_queue = data_queue
         self.visualizer = None
+        self.daemon = True # メインスレッド終了時に一緒に終了するように設定
 
     def run(self):
         self.visualizer = Visualizer(self.data_queue)
@@ -165,4 +175,7 @@ class VisualizerThread(threading.Thread):
 
     def stop(self):
         if self.visualizer:
+            # pygletのメインループを終了させるために、メインスレッドから呼び出す必要がある
+            # pyglet.clock.schedule_once(self.visualizer.close, 0) は別スレッドからだと問題を起こす可能性
+            # 直接 close() を呼び出す
             self.visualizer.close()

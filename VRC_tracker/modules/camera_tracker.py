@@ -11,6 +11,7 @@ class CameraTracker:
             # 指定されたdevice_idで開けない場合、自動検出を試みる
             found_camera = False
             for i in range(5): # ID 0から4までを試す (必要に応じて範囲を広げてください)
+                print(f"Attempting to open camera with ID: {i}")
                 self.cap = cv2.VideoCapture(i)
                 if self.cap.isOpened():
                     print(f"Successfully opened video device {i}.")
@@ -34,6 +35,7 @@ class CameraTracker:
             min_detection_confidence=0.7,
             min_tracking_confidence=0.7
         )
+        # MediaPipeの描画ユーティリティの正しいパス
         self.mp_drawing = mp.solutions.drawing_utils
 
     def get_landmarks(self):
@@ -52,8 +54,8 @@ class CameraTracker:
 
         if hand_results.multi_hand_landmarks:
             for hand_landmarks in hand_results.multi_hand_landmarks:
-                self.mp_hands.drawing_utils.draw_landmarks(
-                    frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
+                self.mp_drawing.draw_landmarks(
+                    frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS) # ここを変更
         if face_results.multi_face_landmarks:
             for face_landmarks in face_results.multi_face_landmarks:
                 self.mp_drawing.draw_landmarks(
