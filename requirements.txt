@@ -1,0 +1,8 @@
+opencv-python==4.11.0.86
+mediapipe==0.10.21
+python-osc==1.9.3
+joycon-python==0.2.4
+hidapi==0.14.0.post4
+pyglm==2.8.2
+Pillow==10.4.0
+pyglet==2.1.6
