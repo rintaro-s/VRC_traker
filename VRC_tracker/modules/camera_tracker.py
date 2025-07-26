@@ -7,7 +7,6 @@ class CameraTracker:
         self.pose_min_detection_confidence = pose_min_detection_confidence
         self.pose_min_tracking_confidence = pose_min_tracking_confidence
 
-        # まず指定されたdevice_idを試す
         self.cap = cv2.VideoCapture(device_id)
         if not self.cap.isOpened():
             print(f"Warning: Could not open video device {device_id}. Attempting auto-detection...")

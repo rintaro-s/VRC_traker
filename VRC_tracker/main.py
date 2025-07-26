@@ -29,7 +29,6 @@ class TrackingThread(threading.Thread):
     def _initialize_modules(self):
         if self.camera_tracker:
             self.camera_tracker.release()
-        # CameraTrackerの初期化時にPoseTrackingの設定を渡す
         self.camera_tracker = CameraTracker(
             device_id=self.config.get_camera_device_id(),
             pose_min_detection_confidence=self.config.get_pose_min_detection_confidence(),
